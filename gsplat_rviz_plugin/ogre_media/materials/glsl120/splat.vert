@@ -6,19 +6,6 @@ layout(location = 0) in vec2 vertex;
 // Source 1: sorted splat index — per-instance (divisor = 1)
 layout(location = 8) in float uv0;
 
-// Compact base TBO: 2 uvec4 texels per splat (32 B).
-//   texel 0.xyz = uintBitsToFloat → center
-//   texel 0.w   = packHalf2x16(cov00, cov01)
-//   texel 1.x   = packHalf2x16(cov02, cov11)
-//   texel 1.y   = packHalf2x16(cov12, cov22)
-//   texel 1.z   = packUnorm4x8(r, g, b, a)   ← DC pre-baked to uint8
-//   texel 1.w   = reserved
-uniform usamplerBuffer u_splats;
-
-// Optional SH TBO: (sh_degree+1)² - 1 RGBA16F texels per splat, non-DC coeffs.
-// Bound only when sh_degree > 0; shader avoids sampling it otherwise.
-uniform samplerBuffer u_sh;
-
 uniform mat4          view_matrix;
 uniform mat4          projectionMatrix;
 uniform vec3          cam_view_dir;
@@ -34,6 +21,30 @@ uniform vec3          u_clip_max;
 // Far = -1 signals "unset" → fragment shaders fall back to gl_FragCoord.z.
 uniform float         u_splat_z_near;
 uniform float         u_splat_z_far;
+
+// ── Texture-buffer samplers — declared LAST on purpose ─────────────────────
+// RViz2 hard-codes Ogre's legacy RenderSystem_GL, which finds shader constants
+// by *text-parsing* the GLSL source. It mis-reads the first usamplerBuffer /
+// samplerBuffer it meets as the start of a block and silently drops every
+// declaration after it — which (when these sat at the top) zeroed out
+// view_matrix / projectionMatrix / … so splat.program's param_named_auto
+// bindings failed and every splat collapsed to an invisible clip-space point.
+// Keeping the samplers below all the scalar/matrix params makes those extract
+// correctly. The samplers need no host reflection: they default to texture
+// unit 0 and SplatCloud binds the base TBO to GL_TEXTURE0 (SH TBO to unit 1).
+//
+// Compact base TBO: 2 uvec4 texels per splat (32 B).
+//   texel 0.xyz = uintBitsToFloat → center
+//   texel 0.w   = packHalf2x16(cov00, cov01)
+//   texel 1.x   = packHalf2x16(cov02, cov11)
+//   texel 1.y   = packHalf2x16(cov12, cov22)
+//   texel 1.z   = packUnorm4x8(r, g, b, a)   ← DC pre-baked to uint8
+//   texel 1.w   = reserved
+uniform usamplerBuffer u_splats;
+
+// Optional SH TBO: (sh_degree+1)² - 1 RGBA16F texels per splat, non-DC coeffs.
+// Bound only when sh_degree > 0; shader avoids sampling it otherwise.
+uniform samplerBuffer u_sh;
 
 out vec4  vColor;
 out vec2  vPosition;
